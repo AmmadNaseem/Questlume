@@ -1,0 +1,45 @@
+# Credentials and environment configuration (keep the public template).
+.env
+.env.*
+!.env.example
+*.env
+secrets/
+credentials/
+.streamlit/secrets.toml
+*credentials*.json
+*service-account*.json
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+
+# Local documents and generated results can contain confidential source text.
+data/uploads/
+outputs/
+.build/
+*.log
+logs/
+
+# Python environments, caches and local tooling.
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+.idea/
+.vscode/
+.codex/
+.agents/
+
+# Operating-system and editor scratch files.
+Thumbs.db
+.DS_Store
+*.tmp
+*.bak
+*~

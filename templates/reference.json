@@ -1,0 +1,178 @@
+{
+  "id": "reference",
+  "template_file": "reference.pptx",
+  "sha256": "cfa82ed6b14da696560370717db164e1dfed4799e3a9f655a4ea1a4a0fed9995",
+  "slide_size_emu": [
+    12192000,
+    6858000
+  ],
+  "fonts": [
+    "Consolas",
+    "Trebuchet MS",
+    "Verdana"
+  ],
+  "layouts": {
+    "cover": {
+      "source_slide": 1,
+      "clear_text_shapes": [
+        "TextBox 2",
+        "TextBox 4",
+        "TextBox 6",
+        "TextBox 8"
+      ],
+      "shape_names": {
+        "3": "TextBox 2",
+        "4": "Rounded Rectangle 3",
+        "5": "TextBox 4",
+        "6": "Rounded Rectangle 5",
+        "7": "TextBox 6",
+        "8": "Rounded Rectangle 7",
+        "9": "TextBox 8"
+      }
+    },
+    "concept": {
+      "source_slide": 2,
+      "clear_text_shapes": [
+        "TextBox 2",
+        "TextBox 3",
+        "TextBox 5",
+        "TextBox 6",
+        "TextBox 8",
+        "TextBox 10"
+      ],
+      "shape_names": {
+        "2": "Rectangle 1",
+        "3": "TextBox 2",
+        "4": "TextBox 3",
+        "5": "Rounded Rectangle 4",
+        "6": "TextBox 5",
+        "7": "TextBox 6",
+        "8": "Rounded Rectangle 7",
+        "9": "TextBox 8",
+        "10": "Rounded Rectangle 9",
+        "11": "TextBox 10"
+      }
+    },
+    "comparison": {
+      "source_slide": 3,
+      "clear_text_shapes": [
+        "TextBox 2",
+        "TextBox 3",
+        "TextBox 5",
+        "TextBox 7",
+        "TextBox 9"
+      ],
+      "shape_names": {
+        "2": "Rectangle 1",
+        "3": "TextBox 2",
+        "4": "TextBox 3",
+        "5": "Rounded Rectangle 4",
+        "6": "TextBox 5",
+        "7": "Rounded Rectangle 6",
+        "8": "TextBox 7",
+        "9": "Rounded Rectangle 8",
+        "10": "TextBox 9"
+      }
+    },
+    "code": {
+      "source_slide": 8,
+      "clear_text_shapes": [
+        "TextBox 2",
+        "TextBox 3",
+        "TextBox 5",
+        "TextBox 6",
+        "TextBox 8"
+      ],
+      "shape_names": {
+        "2": "Rectangle 1",
+        "3": "TextBox 2",
+        "4": "TextBox 3",
+        "5": "Rounded Rectangle 4",
+        "6": "TextBox 5",
+        "7": "TextBox 6",
+        "8": "Rounded Rectangle 7",
+        "9": "TextBox 8"
+      }
+    },
+    "application": {
+      "source_slide": 7,
+      "clear_text_shapes": [
+        "TextBox 2",
+        "TextBox 3",
+        "TextBox 5",
+        "TextBox 7",
+        "TextBox 9",
+        "TextBox 11",
+        "TextBox 13"
+      ],
+      "shape_names": {
+        "2": "Rectangle 1",
+        "3": "TextBox 2",
+        "4": "TextBox 3",
+        "5": "Rounded Rectangle 4",
+        "6": "TextBox 5",
+        "7": "Rounded Rectangle 6",
+        "8": "TextBox 7",
+        "9": "Rounded Rectangle 8",
+        "10": "TextBox 9",
+        "11": "Rounded Rectangle 10",
+        "12": "TextBox 11",
+        "13": "Rounded Rectangle 12",
+        "14": "TextBox 13"
+      }
+    },
+    "challenge": {
+      "source_slide": 9,
+      "clear_text_shapes": [
+        "TextBox 2",
+        "TextBox 3",
+        "TextBox 5",
+        "TextBox 6",
+        "TextBox 8",
+        "TextBox 10",
+        "TextBox 12",
+        "TextBox 14"
+      ],
+      "shape_names": {
+        "2": "Rectangle 1",
+        "3": "TextBox 2",
+        "4": "TextBox 3",
+        "5": "Rounded Rectangle 4",
+        "6": "TextBox 5",
+        "7": "TextBox 6",
+        "8": "Rounded Rectangle 7",
+        "9": "TextBox 8",
+        "10": "Rounded Rectangle 9",
+        "11": "TextBox 10",
+        "12": "Rounded Rectangle 11",
+        "13": "TextBox 12",
+        "14": "Rounded Rectangle 13",
+        "15": "TextBox 14"
+      }
+    },
+    "takeaways": {
+      "source_slide": 10,
+      "clear_text_shapes": [
+        "TextBox 2",
+        "TextBox 3",
+        "TextBox 5",
+        "TextBox 7",
+        "TextBox 9",
+        "TextBox 11"
+      ],
+      "shape_names": {
+        "2": "Rectangle 1",
+        "3": "TextBox 2",
+        "4": "TextBox 3",
+        "5": "Rounded Rectangle 4",
+        "6": "TextBox 5",
+        "7": "Rounded Rectangle 6",
+        "8": "TextBox 7",
+        "9": "Rounded Rectangle 8",
+        "10": "TextBox 9",
+        "11": "Rounded Rectangle 10",
+        "12": "TextBox 11"
+      }
+    }
+  }
+}

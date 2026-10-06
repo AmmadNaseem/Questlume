@@ -1,6 +1,16 @@
 langchain
 langchain-community
+langchain-text-splitters
+langchain-huggingface
+sentence-transformers
 langchain-core
+langchain-groq
+langchain-google-genai
+langchain-openrouter
+pydantic
+pydantic-settings
+httpx
+beautifulsoup4
 openai
 pypdf
 tiktoken
@@ -10,6 +20,7 @@ uvicorn
 jinja2
 python-multipart
 PyPDF2
-fais-cpu
+faiss-cpu
 python-dotenv
--e .
+streamlit>=1.40,<2
+# -e .
