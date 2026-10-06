@@ -9,7 +9,7 @@ from langchain_core.runnables import RunnableLambda
 from pydantic import ValidationError
 
 from src.core.config import Settings
-from src.core.llm_factory import AllProvidersUnavailableError, _compose
+from src.core.llm_factory import AllProvidersUnavailableError, ContextLimitError, _compose
 
 
 class QuotaError(Exception):
@@ -20,7 +20,30 @@ class AuthError(Exception):
     status_code = 401
 
 
+class RequestError(Exception):
+    status_code = 400
+
+
 class FallbackTests(unittest.TestCase):
+    def test_context_and_compatibility_rejections_try_other_models(self):
+        for message in ('context_length_exceeded', 'model_decommissioned', 'unsupported response_format'):
+            router, calls = self.router([RequestError(message), None, None])
+            self.assertEqual(router.invoke('unchanged topic'), 'unchanged topic')
+            self.assertEqual(calls, ['groq', 'openrouter'])
+
+    def test_mixed_quota_context_failures_preserve_recovery_signal(self):
+        for asynchronous in (False, True):
+            router, calls = self.router([QuotaError(), RequestError('maximum context'), QuotaError()])
+            with self.assertRaises(ContextLimitError):
+                asyncio.run(router.ainvoke('topic')) if asynchronous else router.invoke('topic')
+            self.assertEqual(len(calls), 3)
+
+    def test_unknown_bad_request_is_not_hidden(self):
+        router, calls = self.router([RequestError('invalid parameter'), None, None])
+        with self.assertRaises(RequestError):
+            router.invoke('topic')
+        self.assertEqual(calls, ['groq'])
+
     def router(self, failures):
         calls = []
         providers = []

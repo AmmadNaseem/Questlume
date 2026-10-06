@@ -2,7 +2,7 @@
 
 from pydantic import ValidationError
 from src.core.config import Settings
-from src.core.llm_factory import AllProvidersUnavailableError
+from src.core.llm_factory import AllProvidersUnavailableError, ContextLimitError
 from src.export.pptx_renderer import PresentationRenderError
 from src.ingestion.pdf_loader import PDFIngestionError, PDFTextUnavailableError
 from src.ingestion.web_search import WebSearchError
@@ -18,6 +18,8 @@ class UserInputError(ValueError):
 def error_message(error: Exception) -> str:
     if isinstance(error, UserInputError):
         return str(error)
+    if isinstance(error, ContextLimitError):
+        return 'The AI providers still rejected the context size after automatic reduction. Your topic was preserved. Ask the administrator to configure a model with suitable context/quota limits; shortening your topic is not required.'
     # SDK exceptions differ by provider; inspect bounded metadata, never raw response text.
     current = error
     seen = set()
@@ -33,7 +35,7 @@ def error_message(error: Exception) -> str:
         if status == 404:
             return 'A configured model or provider endpoint was not found. Ask the administrator to check the model ID and whether it has been retired.'
         if status in (400, 413, 422):
-            return 'A provider rejected the request or its size. Try a narrower topic or fewer questions; ask the administrator to check model compatibility and context limits if it continues.'
+            return 'A provider rejected the request format or size. Your topic does not need to change. Ask the administrator to check model compatibility and context limits using the error reference.'
         if status in (402, 429):
             return 'A provider has reached its quota or rate limit. Wait before retrying, or ask the administrator to check quota and fallback configuration.'
         if isinstance(status, int) and 500 <= status < 600:

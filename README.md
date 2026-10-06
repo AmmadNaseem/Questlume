@@ -420,7 +420,15 @@ tries Groq, then OpenRouter, then Gemini. The implementation classifies transpor
 errors, timeouts, HTTP 402/408/429 and HTTP 5xx as temporary/quota availability
 failures and uses LangChain `with_fallbacks()` to route them.
 
-Authentication errors, invalid requests and parsing/programming errors do not
+Recognized context-limit and model/response-format compatibility failures also
+try the configured fallback providers. If routing still reports a context limit,
+the UI generation service halves its evidence budget and retries up to
+`CONTEXT_RETRY_LIMIT` times (default 2, maximum 3), keeping the topic, question
+count and source mode unchanged. It reuses the existing embeddings and index.
+This is a character-based evidence budget; provider token limits and quotas
+still apply. Recovery stops at a 1,500-character evidence budget or the retry limit.
+
+Authentication errors, unrecognized invalid requests and parsing/programming errors do not
 automatically trigger provider fallback. Parser/review failures are handled by
 the pipeline's bounded revision logic where applicable. If all providers are
 unavailable, generation stops safely and reports a retry-later message. Free tiers

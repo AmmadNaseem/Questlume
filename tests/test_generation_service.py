@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 from langchain_core.documents import Document
 from src.core.config import Settings
+from src.core.llm_factory import ContextLimitError
 from src.ingestion.pdf_loader import PDFIngestionError, PDFLoadResult
 from src.ingestion.web_loader import WebLoadResult
 from src.schemas.requests import DocumentInput, InterviewRequest, PresentationRequest, WebInput
@@ -16,6 +17,31 @@ from src.pipelines.interview import InsufficientEvidenceError
 
 
 class GenerationServiceTests(unittest.TestCase):
+    def test_context_recovery_keeps_topic_count_and_reuses_index(self):
+        from contextlib import ExitStack
+        names = ['get_llm', 'get_embeddings', 'get_search_tool', 'split_pages',
+                 'build_web_index', 'build_retriever', 'build_interview_chains',
+                 'WebInterviewPipeline', 'research_web']
+        request = self.request(WebInput())
+        page = Document(page_content='Evidence', metadata={'url': 'https://docs.python.org/types'})
+        with ExitStack() as stack:
+            mocked = {name: stack.enter_context(patch('src.services.generation.' + name)) for name in names}
+            mocked['research_web'].return_value = WebLoadResult((page,), ())
+            mocked['split_pages'].return_value = [page] * 30
+            pipeline = mocked['WebInterviewPipeline'].return_value
+            pipeline.run.side_effect = [ContextLimitError('too large'), 'approved']
+            self.assertEqual(generate(request, [], self.settings).output, 'approved')
+            configs = [call.args[0] for call in mocked['WebInterviewPipeline'].call_args_list]
+            self.assertEqual(configs[1].interview_context_max_chars, configs[0].interview_context_max_chars // 2)
+            self.assertTrue(all(call.args[0] == request for call in pipeline.run.call_args_list))
+            mocked['build_web_index'].assert_called_once()
+            mocked['get_embeddings'].assert_called_once()
+            pipeline.run.reset_mock()
+            pipeline.run.side_effect = ContextLimitError('still too large')
+            with self.assertRaises(ContextLimitError):
+                generate(request, [], self.settings)
+            self.assertEqual(pipeline.run.call_count, self.settings.context_retry_limit + 1)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

@@ -99,6 +99,7 @@ class Settings(RenderingSettings):
     interview_context_max_chars: int = Field(default=16_000, ge=1)
     evidence_retry_limit: int = Field(default=1, ge=0, le=2)
     evidence_max_retrieval_k: int = Field(default=40, ge=1)
+    context_retry_limit: int = Field(default=2, ge=0, le=3)
     presentation_revision_limit: int = Field(default=2, ge=0, le=5)
     presentation_context_max_chars: int = Field(default=24_000, ge=1)
     presentation_retrieval_k: int = Field(default=12, ge=1)

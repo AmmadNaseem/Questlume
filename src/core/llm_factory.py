@@ -1,6 +1,7 @@
 """Create provider-specific LangChain chat models from validated settings."""
 
 import logging
+from contextvars import ContextVar
 from typing import Any
 
 import httpx
@@ -71,6 +72,31 @@ class AllProvidersUnavailableError(RuntimeError):
     """All providers failed; callers should offer a retry later."""
 
 
+class ContextLimitError(ProviderUnavailableError):
+    """All attempted routing cannot fit the request; reduce evidence, not the topic."""
+
+
+_context_failures: ContextVar[list[ContextLimitError] | None] = ContextVar('context_failures', default=None)
+
+
+def _request_failure_kind(error: Exception) -> str | None:
+    status = getattr(error, 'status_code', None) or getattr(error, 'code', None)
+    if status is None:
+        status = getattr(getattr(error, 'response', None), 'status_code', None)
+    # Inspect locally but never log provider bodies, which can contain prompt text.
+    message = str(error).lower()
+    if status == 413 or status in (400, 422) and any(marker in message for marker in (
+            'context_length_exceeded', 'context window', 'maximum context', 'too many tokens',
+            'request too large', 'reduce the length', 'input token limit')):
+        return 'context'
+    if status in (400, 404, 422) and any(marker in message for marker in (
+            'model_not_found', 'model not found', 'model_decommissioned', 'model has been decommissioned',
+            'model is not supported', 'unsupported model', 'response_format is not supported',
+            'unsupported response_format', 'does not support json', 'no endpoints found')):
+        return 'compatibility'
+    return None
+
+
 def _is_availability_error(error: Exception) -> bool:
     current: BaseException | None = error
     seen: set[int] = set()
@@ -91,6 +117,17 @@ def _is_availability_error(error: Exception) -> bool:
 
 def _guard_provider(provider: str, model: Runnable) -> Runnable:
     def normalize(error: Exception) -> None:
+        kind = _request_failure_kind(error)
+        if kind == 'context':
+            logger.warning('llm_request_rejected provider=%s reason=context_limit', provider)
+            failure = ContextLimitError('Provider context limit exceeded.')
+            failures = _context_failures.get()
+            if failures is not None:
+                failures.append(failure)
+            raise failure from None
+        if kind == 'compatibility':
+            logger.warning('llm_request_rejected provider=%s reason=model_compatibility', provider)
+            raise ProviderUnavailableError('Configured model cannot handle this request.') from None
         if _is_availability_error(error):
             logger.warning("llm_provider_unavailable provider=%s", provider)
             raise ProviderUnavailableError(f"Provider unavailable: {provider}") from None
@@ -119,20 +156,36 @@ def _compose(providers: list[tuple[str, Runnable]]) -> Runnable:
     )
 
     def invoke(value: Any, config: RunnableConfig) -> Any:
+        failures: list[ContextLimitError] = []
+        token = _context_failures.set(failures)
         try:
             return routed.invoke(value, config=config)
+        except ContextLimitError:
+            raise
         except ProviderUnavailableError:
+            if failures:
+                raise failures[0] from None
             raise AllProvidersUnavailableError(
                 "All configured providers are unavailable. Please retry later."
             ) from None
+        finally:
+            _context_failures.reset(token)
 
     async def ainvoke(value: Any, config: RunnableConfig) -> Any:
+        failures: list[ContextLimitError] = []
+        token = _context_failures.set(failures)
         try:
             return await routed.ainvoke(value, config=config)
+        except ContextLimitError:
+            raise
         except ProviderUnavailableError:
+            if failures:
+                raise failures[0] from None
             raise AllProvidersUnavailableError(
                 "All configured providers are unavailable. Please retry later."
             ) from None
+        finally:
+            _context_failures.reset(token)
 
     return RunnableLambda(invoke, afunc=ainvoke, name="llm_fallback_router")
 
@@ -143,7 +196,7 @@ def get_llm(
     """Create once at startup; return a sync/async LangChain fallback Runnable.
 
     Structured output is applied to each model before composing fallbacks.
-    Authentication, invalid requests, and parsing failures are not hidden.
+    Authentication, unrecognized invalid requests, and parsing failures are not hidden.
     """
     config = settings if settings is not None else get_settings()
     models: list[tuple[str, Runnable]] = []
