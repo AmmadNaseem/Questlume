@@ -95,7 +95,11 @@ def error_message(error: Exception) -> str:
     if isinstance(error, AllProvidersUnavailableError):
         return 'All configured AI providers are unavailable or have exhausted their quota. Wait and retry, or ask the administrator to check quotas and fallback providers.'
     if isinstance(error, InsufficientEvidenceError):
-        return 'The selected sources do not contain enough relevant information. Add material about your topic, narrow the topic, or request fewer interview questions.'
+        retried = getattr(error, 'recovery_attempts', 0)
+        prefix = 'We also searched a broader selection from the same sources. ' if retried else ''
+        if getattr(error, 'requested_output', None) == 'presentation':
+            return prefix+'The available evidence could not support 10 distinct slides. Choose a topic covered more fully by your sources, add relevant PDFs, or explicitly select Online research. No unsupported slides were generated.'
+        return prefix+'The evidence could not support the requested questions at the chosen difficulty and types. Try 1–3 questions, a difficulty supported by the material, or conceptual/practical types. Add more relevant sources if needed. No unsupported answers were generated.'
     if isinstance(error, (InterviewQualityError, PresentationQualityError)):
         return 'The generated content did not pass its quality checks. No unapproved result was returned. Try a narrower topic or more relevant sources.'
     if isinstance(error, (WebResearchError, WebSearchError)):

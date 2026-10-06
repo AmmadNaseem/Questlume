@@ -12,6 +12,7 @@ from src.ingestion.pdf_loader import PDFIngestionError, PDFLoadResult
 from src.ingestion.web_loader import WebLoadResult
 from src.schemas.requests import DocumentInput, InterviewRequest, PresentationRequest, WebInput
 from src.services.generation import Upload, generate, staged_pdfs
+from src.pipelines.interview import InsufficientEvidenceError
 
 
 class GenerationServiceTests(unittest.TestCase):
@@ -75,8 +76,11 @@ class GenerationServiceTests(unittest.TestCase):
                     mocked = {name: stack.enter_context(patch('src.services.generation.'+name)) for name in names}
                     mocked['load_pdfs'].return_value = PDFLoadResult((page,), ('real-id',), ('warning',))
                     mocked['research_web'].return_value = WebLoadResult((page,), ())
+                    mocked['split_pages'].return_value = [page] * 30
                     expected = 'PresentationPipeline' if presentation else 'PDFInterviewPipeline' if document_mode else 'WebInterviewPipeline'
                     mocked[expected].return_value.run.return_value = MagicMock()
+                    mocked[expected].return_value.run.side_effect = [InsufficientEvidenceError('Too little context'),
+                        mocked[expected].return_value.run.return_value]
                     result = generate(request, [self.upload] if document_mode else [], self.settings)
                     self.assertIs(result.output, mocked[expected].return_value.run.return_value)
                     routed = mocked[expected].return_value.run.call_args.args[0]
@@ -88,9 +92,19 @@ class GenerationServiceTests(unittest.TestCase):
                         mocked['load_pdfs'].assert_not_called()
                         mocked['build_document_index'].assert_not_called()
                     self.assertEqual(request.source, source)  # caller's request remains unchanged
-                    if presentation:
-                        self.assertEqual(mocked['build_retriever'].call_args.args[1].retrieval_k,
-                                         self.settings.presentation_retrieval_k)
+                    initial_k = self.settings.presentation_retrieval_k if presentation else self.settings.retrieval_k
+                    self.assertEqual(mocked['build_retriever'].call_args_list[0].args[1].retrieval_k, initial_k)
+                    self.assertEqual(mocked['build_retriever'].call_args.args[1].retrieval_k, initial_k * 2)
+                    mocked['get_embeddings'].assert_called_once()
+                    if not document_mode:
+                        mocked['research_web'].assert_called_once()
+                    # Recovery stays bounded when broader retrieval still cannot help.
+                    mocked[expected].return_value.run.side_effect = [InsufficientEvidenceError('Still insufficient')] * 2
+                    with self.assertRaises(InsufficientEvidenceError) as failure:
+                        generate(request, [self.upload] if document_mode else [], self.settings)
+                    self.assertEqual(failure.exception.recovery_attempts, 1)
+                    self.assertEqual(failure.exception.requested_output, request.output)
+                    self.assertEqual(mocked[expected].return_value.run.call_count, 4)
 
 
 if __name__ == '__main__':

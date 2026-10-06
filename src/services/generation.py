@@ -13,7 +13,7 @@ from src.core.llm_factory import get_llm
 from src.export.pptx_renderer import render_pptx
 from src.ingestion.pdf_loader import load_pdfs, PDFIngestionError
 from src.ingestion.web_search import get_search_tool
-from src.pipelines.interview import PDFInterviewPipeline, WebInterviewPipeline
+from src.pipelines.interview import PDFInterviewPipeline, WebInterviewPipeline, InsufficientEvidenceError
 from src.pipelines.presentation import PresentationPipeline
 from src.pipelines.web_research import research_web
 from src.retrieval.chunking import split_pages
@@ -108,15 +108,32 @@ def generate(request: InterviewRequest | PresentationRequest, uploads: Sequence[
         k = settings.presentation_retrieval_k
         retrieval_settings = settings.model_copy(update={
             'retrieval_k': k, 'retrieval_fetch_k': max(k, settings.retrieval_fetch_k)})
-    retriever = build_retriever(store, retrieval_settings)
-    progress('Generating and reviewing the result')
-    if isinstance(request, PresentationRequest):
-        pipeline = PresentationPipeline(settings, retriever, build_presentation_chains(llm), web_urls=urls)
-    elif document_mode:
-        pipeline = PDFInterviewPipeline(settings, retriever, build_interview_chains(llm))
-    else:
-        pipeline = WebInterviewPipeline(settings, retriever, build_interview_chains(llm), list(urls))
-    return GenerationResult(pipeline.run(request, progress=progress), tuple(warnings))
+    for attempt in range(settings.evidence_retry_limit + 1):
+        retriever = build_retriever(store, retrieval_settings)
+        progress('Generating and reviewing the result')
+        if isinstance(request, PresentationRequest):
+            pipeline = PresentationPipeline(settings, retriever, build_presentation_chains(llm), web_urls=urls)
+        elif document_mode:
+            pipeline = PDFInterviewPipeline(settings, retriever, build_interview_chains(llm))
+        else:
+            pipeline = WebInterviewPipeline(settings, retriever, build_interview_chains(llm), list(urls))
+        try:
+            return GenerationResult(pipeline.run(request, progress=progress), tuple(warnings))
+        except InsufficientEvidenceError as error:
+            current_k = retrieval_settings.retrieval_k
+            expanded_k = min(current_k * 2, settings.evidence_max_retrieval_k, len(chunks))
+            if attempt == settings.evidence_retry_limit or expanded_k <= current_k:
+                # Trusted diagnostic only; never surface the LLM's raw reason or source content.
+                error.recovery_attempts = attempt
+                error.requested_output = request.output
+                error.requested_count = request.question_count if isinstance(request, InterviewRequest) else 10
+                raise
+            progress(f'Not enough evidence in the first selection; retrieving up to {expanded_k} chunks from the same sources')
+            retrieval_settings = retrieval_settings.model_copy(update={
+                'retrieval_k': expanded_k,
+                'retrieval_fetch_k': max(expanded_k, retrieval_settings.retrieval_fetch_k),
+            })
+    raise AssertionError('Unreachable evidence-recovery state')
 
 
 def presentation_bytes(plan: PresentationPlan, settings: Settings,

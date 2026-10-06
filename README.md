@@ -334,6 +334,16 @@ outputs against their citations.
 
 ### Interview generation
 
+In the UI's application service, insufficient evidence triggers one automatic
+recovery attempt by default: retrieval expands from the same request-scoped index
+(normally 5 to 10 interview chunks or 12 to 24 presentation chunks). It reuses the
+existing embeddings/index, keeps the original count and difficulty, and preserves
+the context budget and quality review. It does not switch source modes. If there
+are no additional chunks, it stops immediately. Recovery can add LLM calls.
+`EVIDENCE_RETRY_LIMIT` controls additional attempts (default 1, maximum 2);
+`EVIDENCE_MAX_RETRIEVAL_K` caps expanded retrieval (default 40). The direct CLI
+pipeline calls do not currently use this application-service recovery loop.
+
 The question-planning chain checks whether evidence can support the requested
 count. The pipeline enforces count, unique questions, difficulty, selected types
 and available source IDs. Each question receives additional question-specific
