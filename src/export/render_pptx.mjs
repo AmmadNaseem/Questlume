@@ -49,7 +49,7 @@ for (const spec of plan.slides) {
   if (layout === 'cover') {
     const shape = find(slide, entry.shape_names['3']);
     shape.text = [
-      {runs:[{run:`DAY ${plan.day}`, textStyle:{fontSize:'20px',bold:true,color:'#00E5FF',typeface:'Verdana'}}]},
+      ...(plan.day == null ? [] : [{runs:[{run:`DAY ${plan.day}`, textStyle:{fontSize:'20px',bold:true,color:'#00E5FF',typeface:'Verdana'}}]}]),
       {runs:[{run:spec.title, textStyle:{fontSize:'46px',bold:true,color:'#F2F2F2',typeface:'Trebuchet MS'}}]},
       {runs:[{run:spec.title.trim().toLowerCase()===plan.topic.trim().toLowerCase() ? '' : plan.topic, textStyle:{fontSize:'24px',color:'#F2F2F2',typeface:'Verdana'}}]},
     ];
@@ -58,7 +58,7 @@ for (const spec of plan.slides) {
     ['5','7','9'].forEach((id,index) => setText(slide,entry,id,
       plan.slides[index+1].title, [Number(id)==5?110.4:Number(id)==7?484.8:859.2, 477,316.8,105],22));
   } else {
-    setText(slide,entry,'3',`DAY ${plan.day} | ${plan.topic}`, [76.8,38.4,1123.2,28],14,'Verdana','#00E5FF');
+    setText(slide,entry,'3',plan.day == null ? plan.topic : `DAY ${plan.day} | ${plan.topic}`, [76.8,38.4,1123.2,28],14,'Verdana','#00E5FF');
     setText(slide,entry,'4',`${spec.number-1}. ${spec.title}`, [76.8,80,1123.2,62],32,'Trebuchet MS');
     if (layout === 'code') {
       setText(slide,entry,'6','CODE EXAMPLE',[96,183,500,32],20,'Verdana','#00E5FF');
@@ -135,7 +135,8 @@ for (let index=0;index<presentation.slides.items.length;index++) {
     const width=element.bbox[2]-insets.left-insets.right;
     let height=0;
     for (const [index,line] of element.text.split('\n').entries()) {
-      const size=target.cover ? [20,46,24][Math.min(index,2)] : target.size;
+      const sizes=plan.day == null ? [46,24] : [20,46,24];
+      const size=target.cover ? sizes[Math.min(index,sizes.length-1)] : target.size;
       measure.font=`${size}px "${target.font}"`;
       let current='', count=1;
       for (const word of line.split(/\s+/)) {

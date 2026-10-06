@@ -23,7 +23,7 @@ def main() -> int:
     parser.add_argument('--source', choices=['document', 'web'], required=True)
     parser.add_argument('--pdf', nargs='+')
     parser.add_argument('--topic', required=True)
-    parser.add_argument('--day', type=int, required=True)
+    parser.add_argument('--day', type=int, help='Optional positive day number; omit for an unnumbered presentation.')
     parser.add_argument('--audience', required=True)
     parser.add_argument('--template', required=True, help='Template ID, not a filesystem path.')
     parser.add_argument('--output', help='Optional new JSON filename inside outputs; existing files are preserved.')

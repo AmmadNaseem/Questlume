@@ -2,6 +2,7 @@
 
 import json
 import logging
+from collections.abc import Callable
 
 from langchain_core.exceptions import OutputParserException
 from langchain_core.runnables import Runnable
@@ -29,7 +30,8 @@ class PresentationPipeline:
         self.chains = chains
         self.web_urls = {str(TypeAdapter(HttpUrl).validate_python(url)) for url in web_urls}
 
-    def run(self, request: PresentationRequest) -> PresentationPlan:
+    def run(self, request: PresentationRequest, *, progress: Callable[[str], None] = lambda message: None) -> PresentationPlan:
+        progress('Retrieving evidence for the presentation')
         document_mode = isinstance(request.source, DocumentInput)
         mode = "document" if document_mode else "web"
         allowed = set(request.source.document_ids) if document_mode else self.web_urls
@@ -55,12 +57,14 @@ class PresentationPipeline:
                       max_notes_chars=self.settings.presentation_max_notes_chars)
         feedback = "First attempt."
         for attempt in range(self.settings.presentation_revision_limit + 1):
+            progress(f'Drafting 10 slides (attempt {attempt + 1})')
             logger.info("presentation_stage stage=draft attempt=%s", attempt)
             try:
                 draft = self.chains.draft.invoke(dict(request=request.model_dump_json(), context=context,
                                                      limits=json.dumps(limits), feedback=feedback))
                 if not draft.sufficient_evidence:
                     raise InsufficientEvidenceError("Evidence cannot support 10 meaningful slides.")
+                progress('Checking slide count, content limits and citations')
                 cited = {source_id for slide in draft.slides for source_id in slide.source_ids}
                 if not cited.issubset(sources):
                     raise ValueError("Slides cite evidence not supplied to generation.")
@@ -77,10 +81,12 @@ class PresentationPipeline:
                     if len(slide.code or '') > limits['max_code_chars'] or len(slide.speaker_notes or '') > limits['max_notes_chars']:
                         raise ValueError("Code or speaker notes exceed content limits.")
                 logger.info("presentation_stage stage=review attempt=%s", attempt)
+                progress('Reviewing all 10 slides against their sources')
                 verdict = self.chains.review.invoke(dict(request=request.model_dump_json(),
                     candidate=plan.model_dump_json(), context=context))
                 if verdict.approved:
                     logger.info("presentation_stage stage=complete attempt=%s approved=true", attempt)
+                    progress('Presentation plan completed and approved')
                     return plan
                 feedback = json.dumps(verdict.issues, ensure_ascii=False)
             except InsufficientEvidenceError:
@@ -90,4 +96,6 @@ class PresentationPipeline:
             except ValueError as error:
                 feedback = str(error)
             logger.warning("presentation_revision attempt=%s approved=false", attempt)
+            if attempt < self.settings.presentation_revision_limit:
+                progress('Quality checks require another attempt; revising the slides')
         raise PresentationQualityError("Presentation did not pass review within the revision limit.")

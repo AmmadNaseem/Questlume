@@ -82,6 +82,7 @@ def generate(request: InterviewRequest | PresentationRequest, uploads: Sequence[
     document_mode = isinstance(request.source, DocumentInput)
     if not document_mode and uploads:
         raise ValueError('Online mode cannot include PDF uploads.')
+    progress('Preparing configured AI providers')
     llm = get_llm(settings)
     if document_mode:
         progress('Extracting PDF text')
@@ -92,12 +93,14 @@ def generate(request: InterviewRequest | PresentationRequest, uploads: Sequence[
         urls = ()
     else:
         progress('Searching and fetching approved online sources')
-        loaded = research_web(request, settings, llm, get_search_tool(settings))
+        loaded = research_web(request, settings, llm, get_search_tool(settings), progress=progress)
         pages, warnings = loaded.pages, loaded.warnings
         urls = tuple(page.metadata['url'] for page in pages)
-    progress('Chunking and building a local evidence index')
+    progress('Splitting source text into searchable chunks')
     chunks = split_pages(pages, settings)
+    progress('Loading the local embedding model (first run may download model files)')
     embeddings = get_embeddings(settings)
+    progress('Embedding source chunks and building the local search index')
     store = (build_document_index(chunks, request.source.document_ids, embeddings)
              if document_mode else build_web_index(chunks, embeddings))
     retrieval_settings = settings
@@ -113,13 +116,17 @@ def generate(request: InterviewRequest | PresentationRequest, uploads: Sequence[
         pipeline = PDFInterviewPipeline(settings, retriever, build_interview_chains(llm))
     else:
         pipeline = WebInterviewPipeline(settings, retriever, build_interview_chains(llm), list(urls))
-    return GenerationResult(pipeline.run(request), tuple(warnings))
+    return GenerationResult(pipeline.run(request, progress=progress), tuple(warnings))
 
 
-def presentation_bytes(plan: PresentationPlan, settings: Settings) -> bytes:
+def presentation_bytes(plan: PresentationPlan, settings: Settings,
+                       progress: Callable[[str], None] = lambda message: None) -> bytes:
     """Render into an isolated directory; return bytes without persistent UI files."""
     root = PROJECT_ROOT / '.build' / 'ui-exports'
     root.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=root) as directory:
         config = settings.model_copy(update={'presentation_output_dir': Path(directory)})
-        return render_pptx(plan, 'presentation.pptx', config).read_bytes()
+        progress('Rendering editable slides and running PowerPoint layout/package checks')
+        result = render_pptx(plan, 'presentation.pptx', config).read_bytes()
+        progress('PowerPoint is ready to download')
+        return result

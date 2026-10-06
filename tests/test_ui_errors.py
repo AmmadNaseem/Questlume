@@ -7,6 +7,15 @@ from src.export.pptx_renderer import PresentationRenderError
 
 
 class ErrorMessageTests(unittest.TestCase):
+    def test_provider_status_codes_have_specific_actions(self):
+        for code, action in ((401, 'API key'), (403, 'permissions'), (404, 'model ID'),
+                             (429, 'quota'), (413, 'size'), (503, 'service error')):
+            error = RuntimeError('private-provider-payload')
+            error.status_code = code
+            message = error_message(error)
+            self.assertIn(action, message)
+            self.assertNotIn('private-provider-payload', message)
+
     def test_specific_pdf_recovery_actions(self):
         cases = [
             (PDFIngestionError('Encrypted PDFs are not supported.'), 'unlocked copy'),

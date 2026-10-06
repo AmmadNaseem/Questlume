@@ -70,7 +70,7 @@ class PresentationRequest(Contract):
     output: Literal["presentation"] = "presentation"
     source: SourceInput
     topic: NonBlank
-    day: int = Field(gt=0, strict=True)
+    day: int | None = Field(default=None, gt=0, strict=True)
     audience: NonBlank
     slide_count: Literal[10] = 10
     template_id: NonBlank

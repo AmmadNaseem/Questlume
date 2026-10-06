@@ -24,6 +24,7 @@ class WebResearchError(RuntimeError):
 def research_web(
     request: InterviewRequest | PresentationRequest, settings: Settings, llm: Runnable, search: Runnable,
     *, fetch: Callable[[str, Settings], Document] = fetch_page,
+    progress: Callable[[str], None] = lambda message: None,
 ) -> WebLoadResult:
     if not isinstance(request.source, WebInput):
         raise ValueError('Web research cannot run in document mode.')
@@ -32,6 +33,7 @@ def research_web(
         domains=json.dumps(settings.web_allowed_domains),
         format_instructions=parser.get_format_instructions()) | llm | parser
     plan = None
+    progress('Planning online search queries')
     for _ in range(settings.interview_revision_limit + 1):
         try:
             candidate = chain.invoke({'request': request.model_dump_json()})
@@ -44,7 +46,8 @@ def research_web(
         raise WebResearchError('Search planner did not produce a valid bounded plan.')
     urls: dict[str, None] = {}
     warnings: list[str] = []
-    for query in plan.queries:
+    for number, query in enumerate(plan.queries, 1):
+        progress(f'Searching query {number} of {len(plan.queries)}')
         try:
             hits = search.invoke({'query': query})
             if not isinstance(hits, list):
@@ -62,7 +65,9 @@ def research_web(
     fetched_urls: set[str] = set()
     total = 0
     # Bound fetch attempts as well as accepted pages.
-    for url in list(urls)[:settings.web_max_pages]:
+    candidates = list(urls)[:settings.web_max_pages]
+    for number, url in enumerate(candidates, 1):
+        progress(f'Fetching source page {number} of {len(candidates)}')
         try:
             page = fetch(url, settings)
             final = validate_url(page.metadata['url'], settings.web_allowed_domains)

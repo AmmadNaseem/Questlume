@@ -15,11 +15,13 @@ from src.ui.errors import UserInputError, error_message
 logger = logging.getLogger(__name__)
 
 
-def report_error(error: Exception) -> None:
+def report_error(error: Exception, *, stage: str | None = None) -> None:
     """Show actionable messages without disclosing keys, excerpts or raw traces."""
     reference = uuid4().hex[:12]
-    logger.error('ui_operation_failed reference=%s error_type=%s', reference, type(error).__name__)
+    logger.error('ui_operation_failed reference=%s error_type=%s stage=%s', reference, type(error).__name__, stage or 'validation')
     st.error(error_message(error))
+    if stage:
+        st.caption(f'Failed during: {stage}')
     st.caption(f'Error reference: {reference}. Share this reference if you need support.')
 
 
@@ -46,14 +48,22 @@ def show_result() -> None:
                     st.write(slide.speaker_notes)
                 st.caption('Evidence: '+', '.join(slide.source_ids))
         if st.button('Create PowerPoint', key='render_pptx'):
+            status = st.status('Preparing PowerPoint export…', expanded=True)
+            stage = 'Validating renderer configuration'
+            def export_progress(message: str) -> None:
+                nonlocal stage
+                stage = message
+                status.update(label=message)
+                status.write(message)
             try:
-                with st.spinner('Rendering and validating 10 slides…'):
-                    st.session_state['pptx_bytes'] = presentation_bytes(output, get_settings())
+                st.session_state['pptx_bytes'] = presentation_bytes(output, get_settings(), export_progress)
+                status.update(label='PowerPoint ready', state='complete', expanded=False)
             except Exception as error:
-                report_error(error)
+                status.update(label='PowerPoint export stopped', state='error', expanded=True)
+                report_error(error, stage=stage)
         if st.session_state.get('pptx_bytes'):
             st.download_button('Download PowerPoint', st.session_state['pptx_bytes'],
-                file_name=f'day-{output.day}.pptx',
+                file_name=f'day-{output.day}.pptx' if output.day is not None else 'presentation.pptx',
                 mime='application/vnd.openxmlformats-officedocument.presentationml.presentation', key='download_pptx')
     else:
         st.download_button('Download Markdown', render_interview_markdown(output),
@@ -86,6 +96,7 @@ def main() -> None:
     st.write('Generate interview questions and answers, or a 10-slide presentation, from your sources.')
     source_mode = st.radio('Knowledge source', ['Uploaded PDFs', 'Online research'], horizontal=True)
     output_mode = st.radio('Create', ['Interview questions', 'Presentation'], horizontal=True)
+    include_day = st.checkbox('Include a day number', value=False) if output_mode == 'Presentation' else False
     with st.form('generation_form'):
         topic = st.text_input('Topic')
         files = []
@@ -100,7 +111,7 @@ def main() -> None:
             types = st.multiselect('Question types', [value.value for value in QuestionType], default=['conceptual'])
             domain = st.text_input('Technology / domain (optional)')
         else:
-            day = st.number_input('Day', min_value=1, value=15, step=1)
+            day = st.number_input('Day', min_value=1, value=15, step=1) if include_day else None
             audience = st.text_input('Audience', value='AI engineering learners')
             st.caption('10 slides using your reference template.')
         st.caption('Generate sends selected source excerpts to your configured external LLM providers. Online mode also uses your search provider.')
@@ -109,7 +120,13 @@ def main() -> None:
         # A failed new request must not display an earlier result as its output.
         st.session_state.pop('generation_result', None)
         st.session_state.pop('pptx_bytes', None)
-        progress = st.empty()
+        status = st.status('Validating your request…', expanded=True)
+        stage = 'Validating request fields and configuration'
+        def progress(message: str) -> None:
+            nonlocal stage
+            stage = message
+            status.update(label=message)
+            status.write(message)
         try:
             source = DocumentInput(document_ids=['pending']) if source_mode == 'Uploaded PDFs' else WebInput()
             if output_mode == 'Interview questions':
@@ -117,7 +134,7 @@ def main() -> None:
                     experience_level=level, difficulty=difficulty, question_count=int(count),
                     question_types=types, domain=domain.strip() or None)
             else:
-                request = PresentationRequest(source=source, topic=topic, day=int(day),
+                request = PresentationRequest(source=source, topic=topic, day=int(day) if day is not None else None,
                     audience=audience, template_id='reference')
             if source_mode == 'Uploaded PDFs' and not files:
                 raise UserInputError('Upload at least one PDF before generating, or choose Online research.')
@@ -132,12 +149,11 @@ def main() -> None:
             if sum(f.size for f in files) > settings.pdf_max_total_bytes:
                 raise UserInputError(f'The PDFs together must be at most {settings.pdf_max_total_bytes / (1024*1024):g} MB. Upload fewer files at a time.')
             uploads = [Upload(file.name, file.getvalue()) for file in files]
-            with st.spinner('Preparing evidence and generating a reviewed result…'):
-                st.session_state['generation_result'] = generate(request, uploads, settings, progress.info)
+            st.session_state['generation_result'] = generate(request, uploads, settings, progress)
+            status.update(label='Generation completed', state='complete', expanded=False)
         except Exception as error:
-            report_error(error)
-        finally:
-            progress.empty()
+            status.update(label='Generation stopped', state='error', expanded=True)
+            report_error(error, stage=stage)
     show_result()
     if st.session_state.get('generation_result') is not None and st.button('Clear result'):
         st.session_state.pop('generation_result', None)

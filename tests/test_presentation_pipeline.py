@@ -42,6 +42,24 @@ class PresentationTests(unittest.TestCase):
         self.assertEqual((plan.day, plan.topic, plan.template_id), (15, 'Type hints', 'reference'))
         self.assertEqual(plan.sources[0].excerpt, self.chunk.page_content)
 
+    def test_progress_tracks_real_pipeline_stages(self):
+        events = []
+        self.pipeline([self.draft, self.accept]).run(self.request, progress=events.append)
+        self.assertIn('Drafting 10 slides (attempt 1)', events)
+        self.assertIn('Reviewing all 10 slides against their sources', events)
+        self.assertEqual(events[-1], 'Presentation plan completed and approved')
+
+    def test_optional_day_and_positive_value_constraint(self):
+        request = PresentationRequest(topic='Type hints', audience='Developers',
+            template_id='reference', source=DocumentInput(document_ids=['d1']))
+        plan = self.pipeline([self.draft, self.accept]).run(request)
+        self.assertIsNone(plan.day)
+        from pydantic import ValidationError
+        for day in (0, -1, True):
+            with self.assertRaises(ValidationError):
+                PresentationRequest(topic='Types', audience='Developers', day=day,
+                    template_id='reference', source=DocumentInput(document_ids=['d1']))
+
     def test_web_mode(self):
         chunk = Document(page_content=self.chunk.page_content, metadata=dict(kind='web', source_id='s1',
             chunk_id='c1', url='https://docs.python.org/types', title='Types'))

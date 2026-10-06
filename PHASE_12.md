@@ -23,7 +23,7 @@ run may download the configured model. PowerPoint export needs the Phase 11 runt
 1. Choose uploaded PDFs or online research.
 2. Choose interview questions or a presentation.
 3. Enter the topic and the output-specific fields. For PDF mode, upload one or
-   several text-based PDFs; for slides, supply the day and audience.
+   several text-based PDFs; for slides, supply the audience and optionally enable a day number.
 4. Select Generate. Source excerpts are sent to configured external LLM providers.
 5. Inspect answers/slides and their sources. Download JSON and interview Markdown.
 6. For a presentation, select Create PowerPoint, then Download PowerPoint.

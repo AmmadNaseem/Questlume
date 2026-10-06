@@ -18,6 +18,29 @@ class UserInputError(ValueError):
 def error_message(error: Exception) -> str:
     if isinstance(error, UserInputError):
         return str(error)
+    # SDK exceptions differ by provider; inspect bounded metadata, never raw response text.
+    current = error
+    seen = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        status = getattr(current, 'status_code', None) or getattr(current, 'code', None)
+        if status is None:
+            status = getattr(getattr(current, 'response', None), 'status_code', None)
+        if status == 401:
+            return 'An AI or search provider rejected its API key. Ask the administrator to check that the key is valid and active; retrying alone will not fix this.'
+        if status == 403:
+            return 'A provider denied access to this request. Ask the administrator to check API permissions, model access and account restrictions.'
+        if status == 404:
+            return 'A configured model or provider endpoint was not found. Ask the administrator to check the model ID and whether it has been retired.'
+        if status in (400, 413, 422):
+            return 'A provider rejected the request or its size. Try a narrower topic or fewer questions; ask the administrator to check model compatibility and context limits if it continues.'
+        if status in (402, 429):
+            return 'A provider has reached its quota or rate limit. Wait before retrying, or ask the administrator to check quota and fallback configuration.'
+        if isinstance(status, int) and 500 <= status < 600:
+            return 'A provider is experiencing a service error. Wait a few moments and retry.'
+        current = current.__cause__ or current.__context__
+    if isinstance(error, ImportError):
+        return 'A required application dependency is missing or incompatible. Ask the administrator to install the project requirements in its virtual environment.'
     if isinstance(error, ValidationError):
         if error.title in ('Settings', 'IngestionSettings', 'RenderingSettings'):
             fields = {name.upper() for name in Settings.model_fields}

@@ -5,7 +5,7 @@ sources into interview preparation material or an editable ten-slide presentatio
 Choose one or multiple uploaded PDFs, or research a topic online, then generate:
 
 - Interview questions, detailed answers, key points, follow-up questions and source references.
-- A reviewed presentation plan based on a topic, day and audience, followed by an
+- A reviewed presentation plan based on a topic, optional day and audience, followed by an
   editable PowerPoint using the supplied reference template.
 
 This project is being developed incrementally for learning and extension toward
@@ -34,7 +34,7 @@ an authenticated, multi-tenant enterprise service.
 | Online inputs | Topic-based research using Tavily or Google search APIs and fetched pages |
 | Interview parameters | Topic, job role, junior/mid/senior experience, difficulty, count, question types, optional domain |
 | Question types | Conceptual, practical, scenario, coding, debugging, architecture, system design, best practices, security, performance, enterprise, behavioral |
-| Presentation parameters | Topic, day, audience, exactly ten slides, reference template |
+| Presentation parameters | Topic, optional day, audience, exactly ten slides, reference template |
 | LLM integrations | Groq, OpenRouter and Google Gemini, configurable order |
 | Retrieval | Local Hugging Face embeddings and request-scoped, in-memory FAISS |
 | Outputs | Interview JSON/Markdown, slide-plan JSON, editable PPTX |
@@ -253,7 +253,7 @@ LLM orchestration remains independent of that rendering implementation.
 ### Presentation from PDFs or online research
 
 1. Select your source mode and **Presentation**.
-2. Enter the topic, day and audience. Upload PDFs when in document mode.
+2. Enter the topic, optional day and audience. Upload PDFs when in document mode.
 3. Select **Generate** to produce a reviewed ten-slide plan.
 4. Inspect the slides and download JSON if you want to retain the plan.
 5. Select **Create PowerPoint** to render the plan using `templates/reference.pptx`.
@@ -529,6 +529,8 @@ Use `--format json` for structured output. Both formats print to the console.
   --source web --topic "Python type hints" --day 15 `
   --audience "AI engineering learners" --template reference --output day15-web-plan.json
 ```
+
+Omit `--day` when you do not want a day label. In the UI, leave **Include a day number** unchecked. The cover and headers then omit the day; the UI download is named `presentation.pptx`.
 
 ### Render an existing plan into an editable PPTX
 

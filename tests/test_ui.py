@@ -14,6 +14,19 @@ from src.services.generation import GenerationResult
 
 
 class UITests(unittest.TestCase):
+    def test_progress_remains_visible_on_failure(self):
+        def fail(request, uploads, settings, progress):
+            progress('Loading the local embedding model')
+            raise RuntimeError('private-failure')
+        with patch('src.ui.app.get_settings', return_value=self.settings), patch('src.ui.app.generate', side_effect=fail):
+            app = self.app()
+            app.radio[0].set_value('Online research').run()
+            app.text_input[0].set_value('Types')
+            app.button[0].click().run()
+            self.assertTrue(any('Failed during: Loading the local embedding model' in item.value for item in app.caption))
+            self.assertTrue(any(item.label == 'Generation stopped' for item in app.status))
+            self.assertFalse(app.exception)
+
     def setUp(self):
         with patch.dict(os.environ, {}, clear=True):
             self.settings = Settings(_env_file=None, llm_provider='groq', llm_fallback_providers=(),
@@ -123,6 +136,21 @@ class UITests(unittest.TestCase):
             app.button[0].click().run()
             self.assertIn(f'up to {self.settings.interview_max_questions}', app.error[0].value)
             generate.assert_not_called()
+
+    def test_presentation_day_is_optional_and_can_be_enabled(self):
+        with patch('src.ui.app.get_settings', return_value=self.settings), \
+             patch('src.ui.app.generate', return_value=GenerationResult(self.plan, ())) as generate:
+            app = self.app()
+            app.radio[0].set_value('Online research').run()
+            app.radio[1].set_value('Presentation').run()
+            self.assertFalse(app.number_input)
+            app.text_input[0].set_value('Types')
+            app.button[0].click().run()
+            self.assertIsNone(generate.call_args.args[0].day)
+            app.checkbox[0].check().run()
+            app.number_input[0].set_value(7)
+            app.button[0].click().run()
+            self.assertEqual(generate.call_args.args[0].day, 7)
 
 
 if __name__ == '__main__':

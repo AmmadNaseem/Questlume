@@ -31,7 +31,7 @@ class SlideSpec(Contract):
 
 class PresentationPlan(Contract):
     topic: NonBlank
-    day: int = Field(gt=0, strict=True)
+    day: int | None = Field(default=None, gt=0, strict=True)
     source_mode: Literal["document", "web"]
     template_id: NonBlank
     slides: list[SlideSpec] = Field(min_length=10, max_length=10)
