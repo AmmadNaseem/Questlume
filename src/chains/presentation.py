@@ -16,10 +16,13 @@ class PresentationChains:
     review: Runnable
 
 
-def build_presentation_chains(llm: Runnable) -> PresentationChains:
+def build_presentation_chains(llm: Runnable, *, parsed_draft: Runnable | None = None,
+                              parsed_review: Runnable | None = None) -> PresentationChains:
     draft_parser = PydanticOutputParser(pydantic_object=PresentationDraft)
     review_parser = PydanticOutputParser(pydantic_object=QAValidationResult)
     return PresentationChains(
-        DRAFT_PROMPT.partial(format_instructions=draft_parser.get_format_instructions()) | llm | draft_parser,
-        REVIEW_PROMPT.partial(format_instructions=review_parser.get_format_instructions()) | llm | review_parser,
+        DRAFT_PROMPT.partial(format_instructions=draft_parser.get_format_instructions()) | (
+            parsed_draft if parsed_draft is not None else llm | draft_parser),
+        REVIEW_PROMPT.partial(format_instructions=review_parser.get_format_instructions()) | (
+            parsed_review if parsed_review is not None else llm | review_parser),
     )

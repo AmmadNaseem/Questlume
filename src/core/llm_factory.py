@@ -6,6 +6,8 @@ from typing import Any
 
 import httpx
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.exceptions import OutputParserException
+from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.runnables import Runnable, RunnableConfig, RunnableLambda
 from pydantic import BaseModel
 
@@ -76,6 +78,10 @@ class ContextLimitError(ProviderUnavailableError):
     """All attempted routing cannot fit the request; reduce evidence, not the topic."""
 
 
+class ProviderOutputError(ProviderUnavailableError):
+    """Model returned content that does not satisfy the requested contract."""
+
+
 _context_failures: ContextVar[list[ContextLimitError] | None] = ContextVar('context_failures', default=None)
 
 
@@ -117,6 +123,9 @@ def _is_availability_error(error: Exception) -> bool:
 
 def _guard_provider(provider: str, model: Runnable) -> Runnable:
     def normalize(error: Exception) -> None:
+        if isinstance(error, OutputParserException):
+            logger.warning('llm_output_rejected provider=%s reason=invalid_schema', provider)
+            raise ProviderOutputError('Model returned invalid structured output.') from None
         kind = _request_failure_kind(error)
         if kind == 'context':
             logger.warning('llm_request_rejected provider=%s reason=context_limit', provider)
@@ -162,6 +171,8 @@ def _compose(providers: list[tuple[str, Runnable]]) -> Runnable:
             return routed.invoke(value, config=config)
         except ContextLimitError:
             raise
+        except ProviderOutputError:
+            raise OutputParserException('Configured models returned invalid structured output.') from None
         except ProviderUnavailableError:
             if failures:
                 raise failures[0] from None
@@ -178,6 +189,8 @@ def _compose(providers: list[tuple[str, Runnable]]) -> Runnable:
             return await routed.ainvoke(value, config=config)
         except ContextLimitError:
             raise
+        except ProviderOutputError:
+            raise OutputParserException('Configured models returned invalid structured output.') from None
         except ProviderUnavailableError:
             if failures:
                 raise failures[0] from None
@@ -191,7 +204,8 @@ def _compose(providers: list[tuple[str, Runnable]]) -> Runnable:
 
 
 def get_llm(
-    settings: Settings | None = None, *, schema: type[BaseModel] | None = None
+    settings: Settings | None = None, *, schema: type[BaseModel] | None = None,
+    parsed_schema: type[BaseModel] | None = None,
 ) -> Runnable:
     """Create once at startup; return a sync/async LangChain fallback Runnable.
 
@@ -199,9 +213,13 @@ def get_llm(
     Authentication, unrecognized invalid requests, and parsing failures are not hidden.
     """
     config = settings if settings is not None else get_settings()
+    if schema is not None and parsed_schema is not None:
+        raise ValueError('Choose either native structured output or parsed output.')
     models: list[tuple[str, Runnable]] = []
     for provider in (config.llm_provider, *config.llm_fallback_providers):
         model = _build_model(provider, config)
         runnable = model.with_structured_output(schema) if schema is not None else model
+        if parsed_schema is not None:
+            runnable = runnable | PydanticOutputParser(pydantic_object=parsed_schema)
         models.append((provider, runnable))
     return _compose(models)

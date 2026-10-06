@@ -9,7 +9,10 @@ from langchain_core.runnables import RunnableLambda
 from pydantic import ValidationError
 
 from src.core.config import Settings
-from src.core.llm_factory import AllProvidersUnavailableError, ContextLimitError, _compose
+from src.core.llm_factory import AllProvidersUnavailableError, ContextLimitError, _compose, get_llm
+from langchain_core.language_models.fake_chat_models import FakeListChatModel
+from src.schemas.interview import QAValidationResult
+from langchain_core.exceptions import OutputParserException
 
 
 class QuotaError(Exception):
@@ -25,6 +28,22 @@ class RequestError(Exception):
 
 
 class FallbackTests(unittest.TestCase):
+    def test_parser_runs_inside_provider_fallback(self):
+        with patch.dict(os.environ, {}, clear=True):
+            settings = Settings(_env_file=None, llm_provider='groq', llm_fallback_providers=('openrouter',),
+                groq_model='fake', groq_api_key='fake', openrouter_model='fake', openrouter_api_key='fake')
+        models = [FakeListChatModel(responses=['not JSON']),
+                  FakeListChatModel(responses=['{"approved": true, "issues": []}'])]
+        with patch('src.core.llm_factory._build_model', side_effect=models) as build:
+            verdict = get_llm(settings, parsed_schema=QAValidationResult).invoke('Review evidence')
+        self.assertTrue(verdict.approved)
+        self.assertEqual(build.call_count, 2)
+
+    def test_invalid_parsed_output_tries_the_next_provider(self):
+        router, calls = self.router([OutputParserException('bad json'), None, None])
+        self.assertEqual(router.invoke('same request'), 'same request')
+        self.assertEqual(calls, ['groq', 'openrouter'])
+
     def test_context_and_compatibility_rejections_try_other_models(self):
         for message in ('context_length_exceeded', 'model_decommissioned', 'unsupported response_format'):
             router, calls = self.router([RequestError(message), None, None])

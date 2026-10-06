@@ -70,6 +70,17 @@ class PresentationTests(unittest.TestCase):
     def test_parse_retry(self):
         self.assertEqual(len(self.pipeline(['invalid json', self.draft, self.accept]).run(self.request).slides), 10)
 
+    def test_invalid_review_retries_review_without_redrafting(self):
+        events = []
+        plan = self.pipeline([self.draft, 'invalid json', self.accept]).run(self.request, progress=events.append)
+        self.assertEqual(len(plan.slides), 10)
+        self.assertEqual(sum(event.startswith('Drafting') for event in events), 1)
+
+    def test_invalid_review_exhaustion_reports_format_failure(self):
+        with self.assertRaises(PresentationQualityError) as failure:
+            self.pipeline([self.draft, 'invalid json', 'invalid json', 'invalid json']).run(self.request)
+        self.assertEqual(failure.exception.reason, 'format')
+
     def test_review_revision(self):
         reject = dict(approved=False, issues=['Unsupported example'])
         self.pipeline([self.draft, reject, self.draft, self.accept]).run(self.request)

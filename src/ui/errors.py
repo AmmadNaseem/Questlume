@@ -103,10 +103,12 @@ def error_message(error: Exception) -> str:
             return prefix+'The available evidence could not support 10 distinct slides. Choose a topic covered more fully by your sources, add relevant PDFs, or explicitly select Online research. No unsupported slides were generated.'
         return prefix+'The evidence could not support the requested questions at the chosen difficulty and types. Try 1–3 questions, a difficulty supported by the material, or conceptual/practical types. Add more relevant sources if needed. No unsupported answers were generated.'
     if isinstance(error, PresentationQualityError) and error.reason == 'format':
-        return 'The AI repeatedly returned malformed slide JSON or fields that do not match the required schema. This is an output-format failure, not evidence that your PDF is inadequate. Retry, or ask the administrator to use a model with reliable structured output.'
+        return 'The AI repeatedly returned invalid JSON during slide drafting or review. Automatic format recovery could not validate the result. Ask the administrator to check structured-output model compatibility using this error reference.'
     if isinstance(error, PresentationQualityError) and error.reason == 'constraints':
         return 'The AI could not produce a slide plan with valid ordering, citations and content limits. No invalid deck was exported. Retry with concise slide content or a more specific topic.'
-    if isinstance(error, (InterviewQualityError, PresentationQualityError)):
+    if isinstance(error, PresentationQualityError):
+        return 'The slide draft still contains unsupported or unsuitable content after automatic revisions. No unapproved deck was exported. Ask the administrator to inspect the presentation review diagnostics using this error reference.'
+    if isinstance(error, InterviewQualityError):
         return 'The generated content did not pass its quality checks. No unapproved result was returned. Try a narrower topic or more relevant sources.'
     if isinstance(error, (WebResearchError, WebSearchError)):
         return 'Online research could not find enough usable sources. Try a more specific topic, or ask the administrator to check search credentials and allowed websites.'

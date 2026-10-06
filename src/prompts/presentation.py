@@ -27,6 +27,10 @@ REVIEW_PROMPT = ChatPromptTemplate.from_messages([
      "speaker note, challenge and takeaway against the sources actually cited by that slide. "
      "Reject unsupported claims, irrelevant citations, near-verbatim copying, repetitive slides, "
      "poor teaching flow, and content unsuitable for the audience. Approve only when no issues remain. "
-     "You assess content, not rendered layout or visual template fidelity. {format_instructions}"),
-    ("human", "Request JSON:\n{request}\nCandidate JSON:\n{candidate}\nEvidence JSON:\n{context}"),
+     "You assess content, not rendered layout or visual template fidelity. "
+     "Return only a JSON object with approved (boolean) and issues (array of strings). "
+     "For rejection, identify each affected slide number, exact unsupported claim and actionable correction. "
+     "Do not reject a faithful paraphrase just because it is not a literal quotation. "
+     "Approved results must have an empty issues array; rejected results require issues. {format_instructions}"),
+    ("human", "Request JSON:\n{request}\nCandidate JSON:\n{candidate}\nEvidence JSON:\n{context}\nFormat correction:\n{format_feedback}"),
 ])

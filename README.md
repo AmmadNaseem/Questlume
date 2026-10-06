@@ -428,7 +428,14 @@ count and source mode unchanged. It reuses the existing embeddings and index.
 This is a character-based evidence budget; provider token limits and quotas
 still apply. Recovery stops at a 1,500-character evidence budget or the retry limit.
 
-Authentication errors, unrecognized invalid requests and parsing/programming errors do not
+Presentation generation parses each provider response inside its fallback route.
+Invalid draft or review JSON therefore tries the next configured model before
+using a pipeline retry. Reviewer JSON repair retries the same validated slide
+plan, rather than spending a content revision on a new draft.
+`PRESENTATION_FORMAT_RETRY_LIMIT` controls these additional review-format attempts
+(default 2, maximum 3). Content rejection still requires corrections and approval.
+
+Authentication errors, unrecognized invalid requests and programming errors do not
 automatically trigger provider fallback. Parser/review failures are handled by
 the pipeline's bounded revision logic where applicable. If all providers are
 unavailable, generation stops safely and reports a retry-later message. Free tiers

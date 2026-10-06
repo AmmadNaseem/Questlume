@@ -114,7 +114,12 @@ def generate(request: InterviewRequest | PresentationRequest, uploads: Sequence[
         retriever = build_retriever(store, retrieval_settings)
         progress('Generating and reviewing the result')
         if isinstance(request, PresentationRequest):
-            pipeline = PresentationPipeline(settings, retriever, build_presentation_chains(llm), web_urls=urls)
+            from src.schemas.presentation import PresentationDraft
+            from src.schemas.interview import QAValidationResult
+            chains = build_presentation_chains(llm,
+                parsed_draft=get_llm(settings, parsed_schema=PresentationDraft),
+                parsed_review=get_llm(settings, parsed_schema=QAValidationResult))
+            pipeline = PresentationPipeline(settings, retriever, chains, web_urls=urls)
         elif document_mode:
             pipeline = PDFInterviewPipeline(settings, retriever, build_interview_chains(llm))
         else:

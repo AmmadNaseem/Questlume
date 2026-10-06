@@ -34,6 +34,21 @@ class PresentationPipeline:
         self.chains = chains
         self.web_urls = {str(TypeAdapter(HttpUrl).validate_python(url)) for url in web_urls}
 
+    def _review(self, request, plan, context, progress):
+        feedback = 'Return the required verdict JSON.'
+        for attempt in range(self.settings.presentation_format_retry_limit + 1):
+            try:
+                return self.chains.review.invoke(dict(request=request.model_dump_json(),
+                    candidate=plan.model_dump_json(), context=context, format_feedback=feedback))
+            except (OutputParserException, ValidationError):
+                logger.warning('presentation_review_format attempt=%s valid=false', attempt)
+                if attempt >= self.settings.presentation_format_retry_limit:
+                    raise PresentationQualityError('Reviewer output could not be validated.', reason='format') from None
+                feedback = ('The last verdict did not match the schema. Return ONLY the complete JSON object '
+                            'with approved: boolean and issues: array of strings. No slide draft or Markdown. '
+                            'If approved is true, issues must be empty; otherwise explain the corrections.')
+                progress('Reviewer returned invalid JSON; retrying the review while keeping the validated slides')
+
     def run(self, request: PresentationRequest, *, progress: Callable[[str], None] = lambda message: None) -> PresentationPlan:
         progress('Retrieving evidence for the presentation')
         document_mode = isinstance(request.source, DocumentInput)
@@ -91,8 +106,7 @@ class PresentationPipeline:
                         raise ValueError("Code or speaker notes exceed content limits.")
                 logger.info("presentation_stage stage=review attempt=%s", attempt)
                 progress('Reviewing all 10 slides against their sources')
-                verdict = self.chains.review.invoke(dict(request=request.model_dump_json(),
-                    candidate=plan.model_dump_json(), context=context))
+                verdict = self._review(request, plan, context, progress)
                 if verdict.approved:
                     logger.info("presentation_stage stage=complete attempt=%s approved=true", attempt)
                     progress('Presentation plan completed and approved')
