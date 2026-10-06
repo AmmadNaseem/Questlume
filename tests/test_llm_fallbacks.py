@@ -28,6 +28,22 @@ class RequestError(Exception):
 
 
 class FallbackTests(unittest.TestCase):
+    def test_context_rejection_reaches_third_provider_and_logs_success(self):
+        for asynchronous in (False, True):
+            router, calls = self.router([RequestError('context_length_exceeded'),
+                                        RequestError('maximum context'), None])
+            with self.assertLogs('src.core.llm_factory', level='WARNING') as logs:
+                result = asyncio.run(router.ainvoke('unchanged request')) if asynchronous else router.invoke('unchanged request')
+            self.assertEqual(result, 'unchanged request')
+            self.assertEqual(calls, ['groq', 'openrouter', 'gemini'])
+            self.assertTrue(any('llm_fallback_started provider=openrouter' in line for line in logs.output))
+            self.assertTrue(any('llm_fallback_succeeded provider=gemini' in line for line in logs.output))
+
+    def test_context_failure_after_invalid_output_still_requests_context_recovery(self):
+        router, _ = self.router([OutputParserException('bad JSON'), RequestError('maximum context'), QuotaError()])
+        with self.assertRaises(ContextLimitError):
+            router.invoke('unchanged request')
+
     def test_parser_runs_inside_provider_fallback(self):
         with patch.dict(os.environ, {}, clear=True):
             settings = Settings(_env_file=None, llm_provider='groq', llm_fallback_providers=('openrouter',),

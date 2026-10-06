@@ -121,7 +121,7 @@ def _is_availability_error(error: Exception) -> bool:
     return False
 
 
-def _guard_provider(provider: str, model: Runnable) -> Runnable:
+def _guard_provider(provider: str, model: Runnable, *, fallback: bool = False) -> Runnable:
     def normalize(error: Exception) -> None:
         if isinstance(error, OutputParserException):
             logger.warning('llm_output_rejected provider=%s reason=invalid_schema', provider)
@@ -142,15 +142,25 @@ def _guard_provider(provider: str, model: Runnable) -> Runnable:
             raise ProviderUnavailableError(f"Provider unavailable: {provider}") from None
 
     def invoke(value: Any, config: RunnableConfig) -> Any:
+        if fallback:
+            logger.warning('llm_fallback_started provider=%s', provider)
         try:
-            return model.invoke(value, config=config)
+            result = model.invoke(value, config=config)
+            if fallback:
+                logger.warning('llm_fallback_succeeded provider=%s', provider)
+            return result
         except Exception as error:
             normalize(error)
             raise
 
     async def ainvoke(value: Any, config: RunnableConfig) -> Any:
+        if fallback:
+            logger.warning('llm_fallback_started provider=%s', provider)
         try:
-            return await model.ainvoke(value, config=config)
+            result = await model.ainvoke(value, config=config)
+            if fallback:
+                logger.warning('llm_fallback_succeeded provider=%s', provider)
+            return result
         except Exception as error:
             normalize(error)
             raise
@@ -159,7 +169,8 @@ def _guard_provider(provider: str, model: Runnable) -> Runnable:
 
 
 def _compose(providers: list[tuple[str, Runnable]]) -> Runnable:
-    guarded = [_guard_provider(name, model) for name, model in providers]
+    guarded = [_guard_provider(name, model, fallback=index > 0)
+               for index, (name, model) in enumerate(providers)]
     routed = guarded[0].with_fallbacks(
         guarded[1:], exceptions_to_handle=(ProviderUnavailableError,)
     )
@@ -172,6 +183,8 @@ def _compose(providers: list[tuple[str, Runnable]]) -> Runnable:
         except ContextLimitError:
             raise
         except ProviderOutputError:
+            if failures:
+                raise failures[0] from None
             raise OutputParserException('Configured models returned invalid structured output.') from None
         except ProviderUnavailableError:
             if failures:
@@ -190,6 +203,8 @@ def _compose(providers: list[tuple[str, Runnable]]) -> Runnable:
         except ContextLimitError:
             raise
         except ProviderOutputError:
+            if failures:
+                raise failures[0] from None
             raise OutputParserException('Configured models returned invalid structured output.') from None
         except ProviderUnavailableError:
             if failures:
