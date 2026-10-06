@@ -12,10 +12,13 @@ DRAFT_PROMPT = ChatPromptTemplate.from_messages([
      "Ground code, speaker notes, comparisons and challenges in cited evidence as well as bullets. "
      "Do not invent facts, statistics, citations or outside examples. When evidence cannot support "
      "10 meaningful slides, set sufficient_evidence=false and return no slides. "
+     "When a previous draft is supplied, revise that draft using the review feedback while preserving supported content. "
+     "Always return the COMPLETE PresentationDraft JSON object with sufficient_evidence, reason and slides; "
+     "never return a patch, a standalone slides array, or commentary. "
      "Respect the supplied content limits. The template ID identifies a future rendering template; "
      "do not claim visual fidelity or generate PowerPoint files. {format_instructions}"),
     ("human", "Request JSON:\n{request}\nContent limits JSON:\n{limits}\n"
-     "Evidence JSON:\n{context}\nPrevious review:\n{feedback}"),
+     "Evidence JSON:\n{context}\nPrevious draft JSON:\n{previous_candidate}\nPrevious review:\n{feedback}"),
 ])
 
 REVIEW_PROMPT = ChatPromptTemplate.from_messages([

@@ -35,7 +35,7 @@ function setText(slide, entry, id, text, frame, size=24, font='Verdana', color='
   shape.text = text;
   if (frame) shape.position = {left:frame[0], top:frame[1], width:frame[2], height:frame[3]};
   shape.text.style = {typeface:font, fontSize:size, color, autoFit:'none', verticalAlignment:'top', alignment:'left', bold:false, italic:false};
-  updated.push({slide, name:shape.name, size, font});
+  updated.push({slideNumber:generated.length, name:shape.name, size, font, frame});
 }
 const lines = values => values.map(value => `• ${value}`).join('\n\n');
 for (const spec of plan.slides) {
@@ -54,19 +54,19 @@ for (const spec of plan.slides) {
       {runs:[{run:spec.title.trim().toLowerCase()===plan.topic.trim().toLowerCase() ? '' : plan.topic, textStyle:{fontSize:'24px',color:'#F2F2F2',typeface:'Verdana'}}]},
     ];
     shape.text.style = {autoFit:'none', verticalAlignment:'top'};
-    updated.push({slide,name:shape.name,size:46,font:'Trebuchet MS',cover:true});
+    updated.push({slideNumber:generated.length,name:shape.name,size:46,font:'Trebuchet MS',cover:true,frame:[168.96,172.8,801.6,233.19]});
     ['5','7','9'].forEach((id,index) => setText(slide,entry,id,
       plan.slides[index+1].title, [Number(id)==5?110.4:Number(id)==7?484.8:859.2, 477,316.8,105],22));
   } else {
     setText(slide,entry,'3',plan.day == null ? plan.topic : `DAY ${plan.day} | ${plan.topic}`, [76.8,38.4,1123.2,28],14,'Verdana','#00E5FF');
     setText(slide,entry,'4',`${spec.number-1}. ${spec.title}`, [76.8,80,1123.2,62],32,'Trebuchet MS');
     if (layout === 'code') {
-      setText(slide,entry,'6','CODE EXAMPLE',[96,183,500,32],20,'Verdana','#00E5FF');
+      setText(slide,entry,'6','CODE EXAMPLE',[96,183,500,40],20,'Verdana','#00E5FF');
       setText(slide,entry,'7',spec.code,[96,233,512,390],20,'Consolas');
       setText(slide,entry,'9',lines(bullets),[682,181,499,436],24);
     } else if (layout === 'concept') {
       const split = Math.ceil(bullets.length/2);
-      setText(slide,entry,'6','KEY POINTS',[106,180,480,32],20,'Verdana','#00E5FF');
+      setText(slide,entry,'6','KEY POINTS',[106,180,480,40],20,'Verdana','#00E5FF');
       setText(slide,entry,'7',lines(bullets.slice(0,split)),[100,233,500,380],24);
       setText(slide,entry,'9',lines(bullets.slice(split)),[682,176,499,185],24);
       const refs = spec.source_ids.map(id => {
@@ -84,7 +84,7 @@ for (const spec of plan.slides) {
         [91.2+index*283.2,180,230.4,254],22));
       setText(slide,entry,'14',bullets.slice(4).join('\n'),[96,506,1084.8,124],24);
     } else if (layout === 'challenge') {
-      setText(slide,entry,'6','CHALLENGE',[96,184,480,32],20,'Verdana','#00E5FF');
+      setText(slide,entry,'6','CHALLENGE',[96,184,480,40],20,'Verdana','#00E5FF');
       setText(slide,entry,'7',bullets[0]??'',[96,238,480,370],24);
       ['9','11','13','15'].forEach((id,index)=>setText(slide,entry,id,bullets[index+1]??'',
         [644,171+index*124.8,536,72],22));
@@ -128,15 +128,16 @@ for (let index=0;index<presentation.slides.items.length;index++) {
   const slide=presentation.slides.items[index];
   const layout=JSON.parse(await (await slide.export({format:'layout'})).text());
   await fs.writeFile(path.join(workDir,`slide-${index+1}.layout.json`),JSON.stringify(layout,null,2));
-  for (const target of updated.filter(value=>value.slide===slide)) {
+  for (const target of updated.filter(value=>value.slideNumber===index+1)) {
     const element=layout.elements.find(value=>value.name===target.name);
     if (!element?.text) continue;
     const insets=element.resolvedTextStyle?.insets??{left:9.6,right:9.6,top:4.8,bottom:4.8};
-    const width=element.bbox[2]-insets.left-insets.right;
+    const frame=target.frame??element.bbox;
+    const width=frame[2]-insets.left-insets.right;
     let height=0;
-    for (const [index,line] of element.text.split('\n').entries()) {
+    for (const [lineIndex,line] of element.text.split('\n').entries()) {
       const sizes=plan.day == null ? [46,24] : [20,46,24];
-      const size=target.cover ? sizes[Math.min(index,sizes.length-1)] : target.size;
+      const size=target.cover ? sizes[Math.min(lineIndex,sizes.length-1)] : target.size;
       measure.font=`${size}px "${target.font}"`;
       let current='', count=1;
       for (const word of line.split(/\s+/)) {
@@ -148,7 +149,7 @@ for (let index=0;index<presentation.slides.items.length;index++) {
       height+=count*size*1.2;
     }
     // Measure wrapped text with template fonts; layout lineCount counts hard breaks only.
-    if (height>element.bbox[3]-insets.top-insets.bottom) {
+    if (height>frame[3]-insets.top-insets.bottom) {
       throw new Error(`Slide ${index+1}: content does not fit ${target.name}; shorten the text.`);
     }
   }

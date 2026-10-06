@@ -21,6 +21,10 @@ logger = logging.getLogger(__name__)
 class PresentationQualityError(RuntimeError):
     """No approved plan produced; unapproved slides are not returned."""
 
+    def __init__(self, message: str, *, reason: str = 'review'):
+        super().__init__(message)
+        self.reason = reason
+
 
 class PresentationPipeline:
     def __init__(self, settings: Settings, retriever: Runnable,
@@ -56,12 +60,17 @@ class PresentationPipeline:
                       max_code_chars=self.settings.presentation_max_code_chars,
                       max_notes_chars=self.settings.presentation_max_notes_chars)
         feedback = "First attempt."
+        previous_candidate = 'No previous draft.'
+        review_issues = []
+        failure_kind = 'review'
         for attempt in range(self.settings.presentation_revision_limit + 1):
             progress(f'Drafting 10 slides (attempt {attempt + 1})')
             logger.info("presentation_stage stage=draft attempt=%s", attempt)
             try:
                 draft = self.chains.draft.invoke(dict(request=request.model_dump_json(), context=context,
-                                                     limits=json.dumps(limits), feedback=feedback))
+                                                     limits=json.dumps(limits), feedback=feedback,
+                                                     previous_candidate=previous_candidate))
+                previous_candidate = draft.model_dump_json()
                 if not draft.sufficient_evidence:
                     raise InsufficientEvidenceError("Evidence cannot support 10 meaningful slides.")
                 progress('Checking slide count, content limits and citations')
@@ -88,14 +97,32 @@ class PresentationPipeline:
                     logger.info("presentation_stage stage=complete attempt=%s approved=true", attempt)
                     progress('Presentation plan completed and approved')
                     return plan
-                feedback = json.dumps(verdict.issues, ensure_ascii=False)
+                review_issues = verdict.issues
+                failure_kind = 'review'
+                feedback = json.dumps({'review_issues': review_issues}, ensure_ascii=False)
+                progress('The reviewer found unsupported or unsuitable content; applying corrections')
             except InsufficientEvidenceError:
                 raise
-            except (OutputParserException, ValidationError):
-                feedback = "Return valid JSON respecting the schema, 10-slide order and citation requirements."
+            except (OutputParserException, ValidationError) as error:
+                failure_kind = 'format'
+                validation = error if isinstance(error, ValidationError) else error.__cause__
+                schema_errors = []
+                if isinstance(validation, ValidationError):
+                    allowed_fields = {'slides', 'number', 'layout', 'purpose', 'title', 'bullets',
+                                      'code', 'speaker_notes', 'source_ids', 'sufficient_evidence',
+                                      'reason', 'approved', 'issues'}
+                    for issue in validation.errors(include_input=False):
+                        location = [part for part in issue['loc'] if isinstance(part, int) or part in allowed_fields]
+                        schema_errors.append({'field': location, 'error_type': issue['type']})
+                feedback = json.dumps({'review_issues': review_issues,
+                    'correction': 'Return the COMPLETE PresentationDraft JSON object, not a patch, explanation or just the slides array. Respect the exact schema, 10-slide order and cited sources.',
+                    'schema_errors': schema_errors})
+                progress('The model returned invalid structured output; requesting a complete corrected JSON draft')
             except ValueError as error:
-                feedback = str(error)
-            logger.warning("presentation_revision attempt=%s approved=false", attempt)
+                failure_kind = 'constraints'
+                feedback = json.dumps({'review_issues': review_issues, 'constraint_correction': str(error)})
+                progress('The draft failed slide structure, citation or content-limit checks; requesting corrections')
+            logger.warning("presentation_revision attempt=%s approved=false failure_kind=%s", attempt, failure_kind)
             if attempt < self.settings.presentation_revision_limit:
                 progress('Quality checks require another attempt; revising the slides')
-        raise PresentationQualityError("Presentation did not pass review within the revision limit.")
+        raise PresentationQualityError("Presentation did not pass review within the revision limit.", reason=failure_kind)

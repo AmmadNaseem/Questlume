@@ -1,0 +1,6 @@
+# Transformers exposes lazy optional modules. Streamlit's source watcher can
+# trigger their imports while inspecting __path__, including unused vision models.
+# Disable source watching; normal form interactions and reruns still work.
+[server]
+fileWatcherType = "none"
+runOnSave = false

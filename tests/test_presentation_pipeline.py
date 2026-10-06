@@ -74,6 +74,29 @@ class PresentationTests(unittest.TestCase):
         reject = dict(approved=False, issues=['Unsupported example'])
         self.pipeline([self.draft, reject, self.draft, self.accept]).run(self.request)
 
+    def test_review_feedback_survives_a_malformed_revision(self):
+        from src.chains.presentation import PresentationChains
+        reject = dict(approved=False, issues=['Remove unsupported examples'])
+        pipeline = self.pipeline([self.draft, reject, 'invalid json', self.draft, self.accept])
+        pipeline.settings = self.settings.model_copy(update={'presentation_revision_limit': 2})
+        calls = []
+        original = pipeline.chains.draft
+        def record(value):
+            calls.append(value)
+            return original.invoke(value)
+        pipeline.chains = PresentationChains(RunnableLambda(record), pipeline.chains.review)
+        plan = pipeline.run(self.request)
+        self.assertEqual(len(plan.slides), 10)
+        self.assertIn('Remove unsupported examples', calls[2]['feedback'])
+        from src.schemas.presentation import PresentationDraft
+        self.assertEqual(json.loads(calls[1]['previous_candidate'])['slides'],
+                         PresentationDraft.model_validate(self.draft).model_dump(mode='json')['slides'])
+
+    def test_malformed_output_has_a_distinct_failure_reason(self):
+        with self.assertRaises(PresentationQualityError) as failure:
+            self.pipeline(['invalid json', 'invalid json']).run(self.request)
+        self.assertEqual(failure.exception.reason, 'format')
+
     def test_never_force_approves(self):
         reject = dict(approved=False, issues=['Unsupported example'])
         with self.assertRaises(PresentationQualityError):

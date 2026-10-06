@@ -109,6 +109,16 @@ Restart the server after changing `.env`: successfully loaded generation setting
 are cached by `get_settings()`. A browser refresh alone does not reliably reload
 that cache.
 
+The repository's `.streamlit/config.toml` disables source-file watching to avoid
+Streamlit inspecting Transformers' lazy optional vision modules. This prevents
+repeated watcher tracebacks such as `No module named 'torchvision'` during text
+embedding use. UI interactions still rerun normally; code edits require restarting
+the server. To explicitly enforce the setting from any launch environment:
+
+```powershell
+.venv\Scripts\python.exe -m streamlit run streamlit_app.py --server.address 127.0.0.1 --server.fileWatcherType none
+```
+
 ## Environment configuration
 
 Settings are defined in `src/core/config.py` and read from the project-root `.env`.

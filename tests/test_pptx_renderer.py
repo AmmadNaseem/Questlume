@@ -10,11 +10,18 @@ from unittest.mock import patch
 import zipfile
 
 from src.core.config import RenderingSettings
-from src.export.pptx_renderer import PresentationRenderError, render_pptx
+from src.export.pptx_renderer import PresentationRenderError, render_pptx, renderer_failure
 from src.schemas.presentation import PresentationPlan
 
 
 class RendererTests(unittest.TestCase):
+    def test_safe_specific_renderer_diagnostics(self):
+        error = renderer_failure('private text\nError: Slide 7: content does not fit TextBox 8; shorten the text.')
+        self.assertEqual((error.reason, error.slide_number, error.text_box), ('overflow', 7, 'TextBox 8'))
+        self.assertNotIn('private text', str(error))
+        self.assertEqual(renderer_failure('Error: Cannot find module private/path').reason, 'dependency')
+        self.assertEqual(renderer_failure('secret-provider-token').reason, 'runtime')
+
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)

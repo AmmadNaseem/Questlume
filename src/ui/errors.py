@@ -100,11 +100,25 @@ def error_message(error: Exception) -> str:
         if getattr(error, 'requested_output', None) == 'presentation':
             return prefix+'The available evidence could not support 10 distinct slides. Choose a topic covered more fully by your sources, add relevant PDFs, or explicitly select Online research. No unsupported slides were generated.'
         return prefix+'The evidence could not support the requested questions at the chosen difficulty and types. Try 1–3 questions, a difficulty supported by the material, or conceptual/practical types. Add more relevant sources if needed. No unsupported answers were generated.'
+    if isinstance(error, PresentationQualityError) and error.reason == 'format':
+        return 'The AI repeatedly returned malformed slide JSON or fields that do not match the required schema. This is an output-format failure, not evidence that your PDF is inadequate. Retry, or ask the administrator to use a model with reliable structured output.'
+    if isinstance(error, PresentationQualityError) and error.reason == 'constraints':
+        return 'The AI could not produce a slide plan with valid ordering, citations and content limits. No invalid deck was exported. Retry with concise slide content or a more specific topic.'
     if isinstance(error, (InterviewQualityError, PresentationQualityError)):
         return 'The generated content did not pass its quality checks. No unapproved result was returned. Try a narrower topic or more relevant sources.'
     if isinstance(error, (WebResearchError, WebSearchError)):
         return 'Online research could not find enough usable sources. Try a more specific topic, or ask the administrator to check search credentials and allowed websites.'
     if isinstance(error, PresentationRenderError):
+        if error.reason in ('overflow', 'width') and error.slide_number is not None:
+            return (f'Slide {error.slide_number} contains text that does not fit its template. '
+                    'Shorten its title, bullets or code lines, then render again. Your JSON plan is still available; '
+                    'you do not need to regenerate the entire presentation.')
+        if error.reason == 'template':
+            return 'The reference template no longer matches its layout registry. Ask the administrator to restore the registered template or update its inspected mappings and hash.'
+        if error.reason == 'dependency':
+            return 'The PowerPoint runtime could not load a required component. Ask the administrator to check the Node executable and installed Artifact Tool dependencies. Your JSON plan remains available.'
+        if error.reason == 'timeout':
+            return 'PowerPoint rendering exceeded its time limit. Retry once; if it continues, ask the administrator to check renderer performance or increase RENDER_TIMEOUT_SECONDS.'
         if str(error).startswith('Configure RENDER_'):
             return 'PowerPoint export is not configured on this computer. Ask the administrator to configure the rendering runtime. You can still download your slide plan as JSON.'
         return 'PowerPoint export failed its runtime or layout checks. Keep your JSON plan, shorten long slide text, and ask the administrator to check the renderer if the problem continues.'

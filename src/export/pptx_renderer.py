@@ -3,6 +3,7 @@
 import json
 import os
 import shutil
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -14,6 +15,30 @@ from src.schemas.presentation import PresentationPlan
 
 class PresentationRenderError(RuntimeError):
     """Rendering or layout checks failed; no final presentation was delivered."""
+
+    def __init__(self, message: str, *, slide_number: int | None = None,
+                 text_box: str | None = None, reason: str = 'runtime'):
+        super().__init__(message)
+        self.slide_number = slide_number
+        self.text_box = text_box
+        self.reason = reason
+
+
+def renderer_failure(stderr: str) -> PresentationRenderError:
+    """Extract only known renderer diagnostics; never expose raw logs or content."""
+    match = re.search(r'Slide (\d+): content does not fit (TextBox \d+); shorten the text\.', stderr)
+    if match and 1 <= int(match[1]) <= 10:
+        return PresentationRenderError('Slide text exceeds the available space.',
+            slide_number=int(match[1]), text_box=match[2], reason='overflow')
+    match = re.search(r'Slide (\d+): an unbroken word or code token exceeds its text frame\.', stderr)
+    if match and 1 <= int(match[1]) <= 10:
+        return PresentationRenderError('A word or code token exceeds the available width.',
+            slide_number=int(match[1]), reason='width')
+    if 'Template registry does not match the deck.' in stderr:
+        return PresentationRenderError('The template was changed without updating its registry.', reason='template')
+    if 'Cannot find module' in stderr or 'ERR_MODULE_NOT_FOUND' in stderr:
+        return PresentationRenderError('A renderer runtime dependency is missing.', reason='dependency')
+    return PresentationRenderError('Renderer rejected the deck. Check runtime or package/layout validation.')
 
 
 def render_pptx(plan: PresentationPlan, filename: str,
@@ -70,10 +95,12 @@ def render_pptx(plan: PresentationPlan, filename: str,
                                      errors='replace', timeout=config.render_timeout_seconds,
                                      check=False, cwd=PROJECT_ROOT,
                                      env={**os.environ, 'RENDER_VALIDATION_PYTHON': config.render_validation_python})
-        except (OSError, subprocess.TimeoutExpired):
-            raise PresentationRenderError('Renderer could not start or exceeded its timeout.') from None
+        except subprocess.TimeoutExpired:
+            raise PresentationRenderError('Rendering exceeded its configured time limit.', reason='timeout') from None
+        except OSError:
+            raise PresentationRenderError('Renderer could not start. Check the Node executable.', reason='dependency') from None
         if process.returncode:
-            raise PresentationRenderError('Renderer rejected the deck. Shorten content or check template/runtime configuration.')
+            raise renderer_failure(process.stderr or '')
         candidate = work / 'final' / 'validated.pptx'
         if not candidate.is_file() or not zipfile.is_zipfile(candidate):
             raise PresentationRenderError('Renderer did not produce a validated PPTX.')
